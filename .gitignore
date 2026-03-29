@@ -1,0 +1,68 @@
+# IDE
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration
+local.properties
+
+# Android Studio captures
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Built application files
+*.apk
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+
+# Gradle files
+build/
+
+# Signing files
+*.jks
+*.keystore
+
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof
+
+# Kotlin
+*.kotlin_metadata
+*.kotlin_module
+
+# Dependency directories
+node_modules/
+
+# Temp files
+*.tmp
+*.temp
+*.log
+
+# Test results
+/test-results/
+/junit-reports/
+
+# Memory dumps
+*.hprof

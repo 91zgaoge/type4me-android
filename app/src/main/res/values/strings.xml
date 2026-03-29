@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Type4Me</string>
+    <string name="ime_label">Type4Me 语音输入</string>
+    <string name="settings_title">Type4Me 设置</string>
+</resources>
