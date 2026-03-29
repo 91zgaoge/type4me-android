@@ -2,6 +2,7 @@ package com.type4me.ime
 
 import android.inputmethodservice.InputMethodService
 import android.view.View
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -9,6 +10,9 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
 import com.type4me.ime.ui.KeyboardScreen
 import com.type4me.ime.viewmodel.IMEViewModel
 import com.type4me.ime.viewmodel.asViewModelFactory
@@ -16,22 +20,25 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 
 @AndroidEntryPoint
-class Type4MeInputMethodService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner {
+class Type4MeInputMethodService : InputMethodService(),
+    LifecycleOwner,
+    ViewModelStoreOwner,
+    SavedStateRegistryOwner {
 
     private lateinit var lifecycleRegistry: LifecycleRegistry
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val _viewModelStore = ViewModelStore()
     private var composeView: ComposeView? = null
 
     private lateinit var viewModelFactory: IMEViewModel.Factory
-
     private lateinit var viewModel: IMEViewModel
 
     override fun onCreate() {
         super.onCreate()
         lifecycleRegistry = LifecycleRegistry(this)
+        savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
-        // Get factory using EntryPoint
         val entryPoint = EntryPointAccessors.fromApplication(
             applicationContext,
             IMEViewModelFactoryEntryPoint::class.java
@@ -49,7 +56,9 @@ class Type4MeInputMethodService : InputMethodService(), LifecycleOwner, ViewMode
 
         composeView = ComposeView(this).apply {
             setContent {
-                KeyboardScreen(viewModel = viewModel)
+                MaterialTheme {
+                    KeyboardScreen(viewModel = viewModel)
+                }
             }
         }
 
@@ -79,6 +88,9 @@ class Type4MeInputMethodService : InputMethodService(), LifecycleOwner, ViewMode
 
     override val viewModelStore: ViewModelStore
         get() = _viewModelStore
+
+    override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
 
     fun commitText(text: String) {
         currentInputConnection?.commitText(text, 1)
