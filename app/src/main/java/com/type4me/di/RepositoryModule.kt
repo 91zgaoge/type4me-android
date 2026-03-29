@@ -44,6 +44,6 @@ object DataStoreModule {
     @Provides
     @Singleton
     fun provideSettingsDataStore(
-        context: android.content.Context
+        @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context
     ): SettingsDataStore = SettingsDataStore(context)
 }

@@ -7,18 +7,22 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import com.type4me.ime.ui.KeyboardScreen
+import com.type4me.ime.viewmodel.IMEViewModel
+import com.type4me.ime.viewmodel.asViewModelFactory
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
+import dagger.hilt.android.EntryPointAccessors
 
 @AndroidEntryPoint
-class Type4MeInputMethodService : InputMethodService(), LifecycleOwner {
+class Type4MeInputMethodService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner {
 
     private lateinit var lifecycleRegistry: LifecycleRegistry
+    private val _viewModelStore = ViewModelStore()
     private var composeView: ComposeView? = null
 
-    @Inject
-    lateinit var viewModelFactory: IMEViewModel.Factory
+    private lateinit var viewModelFactory: IMEViewModel.Factory
 
     private lateinit var viewModel: IMEViewModel
 
@@ -26,12 +30,22 @@ class Type4MeInputMethodService : InputMethodService(), LifecycleOwner {
         super.onCreate()
         lifecycleRegistry = LifecycleRegistry(this)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
+
+        // Get factory using EntryPoint
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext,
+            IMEViewModelFactoryEntryPoint::class.java
+        )
+        viewModelFactory = entryPoint.imeViewModelFactory()
     }
 
     override fun onCreateInputView(): View {
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
 
-        viewModel = ViewModelProvider(this, viewModelFactory)[IMEViewModel::class.java]
+        viewModel = ViewModelProvider(
+            this,
+            viewModelFactory.asViewModelFactory(this)
+        )[IMEViewModel::class.java]
 
         composeView = ComposeView(this).apply {
             setContent {
@@ -57,10 +71,14 @@ class Type4MeInputMethodService : InputMethodService(), LifecycleOwner {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         composeView?.disposeComposition()
         composeView = null
+        _viewModelStore.clear()
     }
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
+
+    override val viewModelStore: ViewModelStore
+        get() = _viewModelStore
 
     fun commitText(text: String) {
         currentInputConnection?.commitText(text, 1)

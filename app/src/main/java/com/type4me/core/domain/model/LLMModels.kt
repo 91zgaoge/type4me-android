@@ -13,7 +13,7 @@ enum class LLMProvider {
 /**
  * LLM 错误类型
  */
-sealed class LLMError(val message: String) {
+sealed class LLMError(message: String) : Exception(message) {
     class NetworkError(message: String) : LLMError(message)
     class AuthError(val provider: String, message: String) : LLMError(message)
     class RateLimitError(val provider: String, message: String) : LLMError(message)
