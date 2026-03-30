@@ -3,6 +3,8 @@ package com.type4me.ime
 import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -22,87 +24,135 @@ class Type4MeInputMethodService : InputMethodService() {
     private var speechRecognizer: SpeechRecognizer? = null
     private var isRecording = false
     private var statusTextView: TextView? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
         Timber.tag(TAG).d("onCreate called")
-        initSpeechRecognizer()
     }
 
-    private fun initSpeechRecognizer() {
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
-                setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        Timber.tag(TAG).d("onReadyForSpeech")
-                        statusTextView?.text = "🎤 正在听..."
-                    }
-
-                    override fun onBeginningOfSpeech() {
-                        Timber.tag(TAG).d("onBeginningOfSpeech")
-                    }
-
-                    override fun onRmsChanged(rmsdB: Float) {}
-
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-
-                    override fun onEndOfSpeech() {
-                        Timber.tag(TAG).d("onEndOfSpeech")
-                        isRecording = false
-                        statusTextView?.text = "识别中..."
-                    }
-
-                    override fun onError(error: Int) {
-                        Timber.tag(TAG).e("onError: $error")
-                        isRecording = false
-                        val errorMsg = when (error) {
-                            SpeechRecognizer.ERROR_AUDIO -> "录音失败"
-                            SpeechRecognizer.ERROR_CLIENT -> "客户端错误"
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "缺少权限"
-                            SpeechRecognizer.ERROR_NETWORK -> "网络错误"
-                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "网络超时"
-                            SpeechRecognizer.ERROR_NO_MATCH -> "未能识别"
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙"
-                            SpeechRecognizer.ERROR_SERVER -> "服务器错误"
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "未检测到语音"
-                            else -> "未知错误"
-                        }
-                        statusTextView?.text = "错误: $errorMsg"
-                    }
-
-                    override fun onResults(results: Bundle?) {
-                        Timber.tag(TAG).d("onResults")
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            val text = matches[0]
-                            Timber.tag(TAG).d("识别结果: $text")
-                            currentInputConnection?.commitText(text, 1)
-                            statusTextView?.text = "✓ 已上屏: $text"
-                        } else {
-                            statusTextView?.text = "未能识别"
-                        }
-                        isRecording = false
-                    }
-
-                    override fun onPartialResults(partialResults: Bundle?) {
-                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            val text = matches[0]
-                            statusTextView?.text = "识别中: $text"
-                        }
-                    }
-
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
+    private fun createNewRecognizer(): SpeechRecognizer? {
+        // 销毁旧的识别器
+        speechRecognizer?.let { oldRecognizer ->
+            try {
+                oldRecognizer.cancel()
+                oldRecognizer.destroy()
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "Error destroying old recognizer")
             }
-            Timber.tag(TAG).d("SpeechRecognizer initialized")
-        } else {
-            Timber.tag(TAG).e("SpeechRecognizer not available")
+            speechRecognizer = null
         }
+
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Timber.tag(TAG).e("SpeechRecognizer not available")
+            return null
+        }
+
+        return SpeechRecognizer.createSpeechRecognizer(this).apply {
+            setRecognitionListener(createRecognitionListener())
+        }
+    }
+
+    private fun createRecognitionListener(): RecognitionListener {
+        return object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                Timber.tag(TAG).d("onReadyForSpeech")
+                statusTextView?.text = "🎤 正在听...请说话"
+            }
+
+            override fun onBeginningOfSpeech() {
+                Timber.tag(TAG).d("onBeginningOfSpeech")
+                statusTextView?.text = "👂 听到声音了..."
+            }
+
+            override fun onRmsChanged(rmsdB: Float) {
+                // 可以显示音量变化
+            }
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {
+                Timber.tag(TAG).d("onEndOfSpeech")
+                statusTextView?.text = "识别中..."
+            }
+
+            override fun onError(error: Int) {
+                Timber.tag(TAG).e("onError: $error")
+                isRecording = false
+                updateMicButtonText(false)
+
+                val errorMsg = when (error) {
+                    SpeechRecognizer.ERROR_AUDIO -> "录音失败"
+                    SpeechRecognizer.ERROR_CLIENT -> "客户端错误"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "缺少麦克风权限"
+                    SpeechRecognizer.ERROR_NETWORK -> "网络错误"
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "网络超时"
+                    SpeechRecognizer.ERROR_NO_MATCH -> "未能识别，请重试"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                        // 识别器忙，延迟重试
+                        handler.postDelayed({
+                            statusTextView?.text = "识别器重置中..."
+                            createNewRecognizer()
+                        }, 500)
+                        "识别器忙，正在重置..."
+                    }
+                    SpeechRecognizer.ERROR_SERVER -> "服务器错误"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "未检测到语音，请重试"
+                    else -> "未知错误"
+                }
+
+                if (error != SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                    statusTextView?.text = "错误: $errorMsg"
+                }
+            }
+
+            override fun onResults(results: Bundle?) {
+                Timber.tag(TAG).d("onResults")
+                isRecording = false
+                updateMicButtonText(false)
+
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val text = matches[0]
+                    Timber.tag(TAG).d("识别结果: $text")
+                    currentInputConnection?.commitText(text, 1)
+                    statusTextView?.text = "✓ 已上屏"
+
+                    // 识别成功后创建新的识别器，避免下次繁忙
+                    handler.postDelayed({
+                        createNewRecognizer()
+                    }, 500)
+                } else {
+                    statusTextView?.text = "未能识别，请重试"
+                }
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val text = matches[0]
+                    statusTextView?.text = "识别中: $text"
+                }
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        }
+    }
+
+    private fun updateMicButtonText(recording: Boolean) {
+        val rootView = window?.window?.decorView?.findViewById<View>(android.R.id.content) as? ViewGroup
+        val layout = rootView?.getChildAt(0) as? LinearLayout
+        val micButton = layout?.getChildAt(2) as? Button
+        micButton?.text = if (recording) "⏹ 停止录音" else "🎤 点击录音"
     }
 
     override fun onCreateInputView(): View {
         Timber.tag(TAG).d("onCreateInputView called")
+
+        // 首次创建识别器
+        if (speechRecognizer == null) {
+            speechRecognizer = createNewRecognizer()
+        }
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -151,11 +201,9 @@ class Type4MeInputMethodService : InputMethodService() {
             }
             setOnClickListener {
                 if (isRecording) {
-                    stopRecording()
-                    text = "🎤 点击录音"
+                    stopRecording(this)
                 } else {
-                    startRecording()
-                    text = "⏹ 停止录音"
+                    startRecording(this)
                 }
             }
         }
@@ -165,11 +213,12 @@ class Type4MeInputMethodService : InputMethodService() {
         return layout
     }
 
-    private fun startRecording() {
+    private fun startRecording(button: Button) {
         Timber.tag(TAG).d("startRecording called")
 
+        // 如果识别器为空或忙，创建新的
         if (speechRecognizer == null) {
-            initSpeechRecognizer()
+            speechRecognizer = createNewRecognizer()
         }
 
         if (speechRecognizer == null) {
@@ -182,30 +231,50 @@ class Type4MeInputMethodService : InputMethodService() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            // 设置较短的超时时间
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000)
         }
 
         try {
             speechRecognizer?.startListening(intent)
             isRecording = true
+            button.text = "⏹ 停止录音"
             Timber.tag(TAG).d("startListening called")
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "startListening failed")
-            statusTextView?.text = "启动失败: ${e.message}"
+            statusTextView?.text = "启动失败: ${e.message}，正在重试..."
             isRecording = false
+
+            // 如果失败，创建新的识别器重试
+            handler.postDelayed({
+                speechRecognizer = createNewRecognizer()
+                statusTextView?.text = "已重置，请再次点击录音"
+            }, 500)
         }
     }
 
-    private fun stopRecording() {
+    private fun stopRecording(button: Button) {
         Timber.tag(TAG).d("stopRecording called")
-        speechRecognizer?.stopListening()
+        try {
+            speechRecognizer?.stopListening()
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "stopListening failed")
+        }
         isRecording = false
-        statusTextView?.text = "点击话筒开始录音"
+        button.text = "🎤 点击录音"
+        statusTextView?.text = "已停止"
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Timber.tag(TAG).d("onDestroy called")
-        speechRecognizer?.destroy()
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error in onDestroy")
+        }
         speechRecognizer = null
     }
 }
