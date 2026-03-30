@@ -138,7 +138,7 @@ class Type4MeInputMethodService : InputMethodService() {
         }
     }
 
-    override fun onComputeInsets(outInsets: Insets?) {
+    override fun onComputeInsets(outInsets: InputMethodService.Insets?) {
         super.onComputeInsets(outInsets)
         outInsets?.let {
             it.contentTopInsets = it.visibleTopInsets
