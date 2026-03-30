@@ -22,6 +22,7 @@ import com.type4me.ime.ui.KeyboardScreen
 import com.type4me.ui.theme.Type4MeTheme
 import kotlinx.coroutines.*
 import timber.log.Timber
+import java.io.File
 
 class Type4MeInputMethodService : InputMethodService() {
 
@@ -141,12 +142,20 @@ class Type4MeInputMethodService : InputMethodService() {
     }
 
     private fun updateComposeEngineStatus() {
-        val voskReady = voskEngine?.let { it.isModelReady() || it.getModelStatus().contains("就绪") } == true
+        val voskReady = voskEngine?.isModelReady() == true
         val sherpaReady = sherpaEngine?.isModelReady() == true
+
+        // 调试信息
+        val modelPath = voskEngine?.let { File(it.getActualModelPath()) }
+        val pathExists = modelPath?.exists() == true
+        val isDir = modelPath?.isDirectory == true
+
+        Timber.tag(TAG).d("Model check: path=$modelPath, exists=$pathExists, isDir=$isDir, voskReady=$voskReady")
 
         composeEngineStatus = when {
             voskReady -> "就绪"
-            sherpaReady -> "就绪"
+            sherpaReady -> "就绪 (Sherpa)"
+            pathExists -> "模型路径存在但结构不对"
             else -> "需下载"
         }
     }

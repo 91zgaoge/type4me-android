@@ -62,11 +62,73 @@ class VoskEngine(private val context: Context) {
 
     /**
      * 检查模型是否已下载
+     * 支持多种可能的目录结构
      */
     fun isModelReady(): Boolean {
-        val modelPath = File(getModelPath())
-        return modelPath.exists() && modelPath.isDirectory &&
-               File(modelPath, "am/final.mdl").exists()
+        val basePath = File(getModelPath())
+
+        // 情况1: 标准路径下直接有模型文件
+        if (checkModelStructure(basePath)) {
+            return true
+        }
+
+        // 情况2: 多嵌套了一层目录（vosk-model-small-cn-0.22/vosk-model-small-cn-0.22/）
+        val nestedDir = File(basePath, MODEL_DIR)
+        if (checkModelStructure(nestedDir)) {
+            return true
+        }
+
+        // 情况3: 检查任何子目录
+        basePath.listFiles()?.filter { it.isDirectory }?.forEach { subDir ->
+            if (checkModelStructure(subDir)) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /**
+     * 获取实际模型路径（处理嵌套目录情况）
+     */
+    fun getActualModelPath(): String {
+        val basePath = File(getModelPath())
+
+        // 标准路径
+        if (checkModelStructure(basePath)) {
+            return basePath.absolutePath
+        }
+
+        // 嵌套目录
+        val nestedDir = File(basePath, MODEL_DIR)
+        if (checkModelStructure(nestedDir)) {
+            return nestedDir.absolutePath
+        }
+
+        // 任何子目录
+        basePath.listFiles()?.filter { it.isDirectory }?.forEach { subDir ->
+            if (checkModelStructure(subDir)) {
+                return subDir.absolutePath
+            }
+        }
+
+        return basePath.absolutePath
+    }
+
+    /**
+     * 检查指定路径是否包含完整的模型结构
+     */
+    private fun checkModelStructure(modelDir: File): Boolean {
+        if (!modelDir.exists() || !modelDir.isDirectory) return false
+
+        // 检查关键文件是否存在
+        val hasAmDir = File(modelDir, "am").exists()
+        val hasConfDir = File(modelDir, "conf").exists()
+        val hasModelFile = File(modelDir, "am/final.mdl").exists()
+
+        Timber.tag(TAG).d("Checking ${modelDir.absolutePath}: am=$hasAmDir, conf=$hasConfDir, final.mdl=$hasModelFile")
+
+        return hasAmDir && hasConfDir && hasModelFile
     }
 
     /**
@@ -92,7 +154,7 @@ class VoskEngine(private val context: Context) {
         }
 
         try {
-            val modelPath = getModelPath()
+            val modelPath = getActualModelPath()
             Timber.tag(TAG).d("Loading model from: $modelPath")
 
             model = Model(modelPath)
