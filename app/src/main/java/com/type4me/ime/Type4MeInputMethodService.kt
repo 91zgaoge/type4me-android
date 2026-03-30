@@ -66,12 +66,18 @@ class Type4MeInputMethodService : InputMethodService() {
         super.onCreate()
         Timber.tag(TAG).d("onCreate called")
 
-        // 初始化离线引擎
-        sherpaEngine = SherpaOnnxEngine(this)
-        voskEngine = VoskEngine(this)
-
-        // Google 引擎在中国不可用，默认使用 Vosk
-        initGoogleSpeechRecognizer()
+        // 延迟初始化引擎，避免在 onCreate 中崩溃
+        handler.postDelayed({
+            try {
+                sherpaEngine = SherpaOnnxEngine(this)
+                voskEngine = VoskEngine(this)
+                initGoogleSpeechRecognizer()
+                Timber.tag(TAG).d("Engines initialized successfully")
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "Failed to initialize engines")
+                composeStatusText = "引擎初始化失败: ${e.message}"
+            }
+        }, 100)
     }
 
     override fun onCreateInputView(): View {
@@ -82,6 +88,10 @@ class Type4MeInputMethodService : InputMethodService() {
         updateComposeEngineStatus()
 
         val composeView = ComposeView(this).apply {
+            // 设置生命周期策略，避免 IME 生命周期问题
+            setViewCompositionStrategy(
+                androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindow
+            )
             setContent {
                 Type4MeTheme(darkTheme = true) {
                     KeyboardScreen(
