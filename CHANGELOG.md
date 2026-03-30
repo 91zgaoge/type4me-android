@@ -4,6 +4,41 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.2.0] - 2024-03-30
+
+### 新增
+- 全新 Jetpack Compose 界面设计
+  - 现代化渐变配色方案（蓝紫主色调）
+  - 大麦克风按钮带脉冲动画效果
+  - 状态卡片实时显示权限和引擎状态
+  - 引擎切换 Chip（Vosk / Sherpa / Google）
+- Vosk 离线语音识别引擎支持
+  - 纯离线运行，无需 Google Play 服务
+  - 中文语音识别支持
+  - 自动检测模型状态
+- ComposeView 生命周期管理
+- 输入法主题透明背景支持
+
+### 修复
+- 修复输入法界面无法显示的问题
+- 修复 InputMethodService.Insets 类型引用错误
+- 添加延迟引擎初始化避免 onCreate 崩溃
+- 添加 FrameLayout 包装确保键盘高度正确
+
+### 变更
+- 默认引擎从 Google 在线改为 Vosk 离线（适配中国用户）
+- 更新主题配置支持 Compose
+
+## [1.0.1] - 2024-03-29
+
+### 新增
+- 基础输入法功能实现
+- SherpaOnnx 离线语音识别
+- Google SpeechRecognizer 在线识别
+- 设置界面
+- 麦克风权限处理
+- 自动更新功能
+
 ## [1.0.0] - 2024-03
 
 ### 新增

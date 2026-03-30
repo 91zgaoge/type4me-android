@@ -66,6 +66,9 @@ class Type4MeInputMethodService : InputMethodService() {
         super.onCreate()
         Timber.tag(TAG).d("onCreate called")
 
+        // 设置 IME 主题
+        setTheme(com.type4me.R.style.Theme_Type4Me)
+
         // 延迟初始化引擎，避免在 onCreate 中崩溃
         handler.postDelayed({
             try {

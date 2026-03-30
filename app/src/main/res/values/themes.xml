@@ -4,5 +4,8 @@
         <item name="android:colorPrimary">@color/purple_500</item>
         <item name="android:colorPrimaryDark">@color/purple_700</item>
         <item name="android:colorAccent">@color/teal_200</item>
+        <!-- IME 需要透明背景 -->
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
     </style>
 </resources>
