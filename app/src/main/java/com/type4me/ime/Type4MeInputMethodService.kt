@@ -81,7 +81,7 @@ class Type4MeInputMethodService : InputMethodService() {
         composePermissionGranted = hasRecordPermission
         updateComposeEngineStatus()
 
-        return ComposeView(this).apply {
+        val composeView = ComposeView(this).apply {
             setContent {
                 Type4MeTheme(darkTheme = true) {
                     KeyboardScreen(
@@ -116,6 +116,15 @@ class Type4MeInputMethodService : InputMethodService() {
                 }
             }
         }
+
+        // 设置键盘高度 - 包装在固定高度的 FrameLayout 中
+        return android.widget.FrameLayout(this).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(composeView)
+        }
     }
 
     private fun updateComposeEngineStatus() {
@@ -126,6 +135,13 @@ class Type4MeInputMethodService : InputMethodService() {
             voskReady -> "就绪"
             sherpaReady -> "就绪"
             else -> "需下载"
+        }
+    }
+
+    override fun onComputeInsets(outInsets: Insets?) {
+        super.onComputeInsets(outInsets)
+        outInsets?.let {
+            it.contentTopInsets = it.visibleTopInsets
         }
     }
 
