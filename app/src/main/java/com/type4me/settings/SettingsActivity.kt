@@ -19,7 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
-import com.type4me.core.data.remote.GitHubUpdateChecker
+import com.type4me.BuildConfig
 import com.type4me.core.data.remote.UpdateManager
 import com.type4me.ui.theme.Type4MeTheme
 import kotlinx.coroutines.launch
@@ -144,7 +144,7 @@ fun SettingsScreen(
 
                     when (val state = updateState) {
                         is UpdateManager.UpdateState.Idle -> {
-                            Text(text = "当前版本: 1.0.0")
+                            Text(text = "当前版本: ${BuildConfig.VERSION_NAME}")
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = {
@@ -342,7 +342,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Type4Me v1.0.0\n语音输入 + LLM 文本优化",
+                        text = "Type4Me v${BuildConfig.VERSION_NAME}\n语音输入 + LLM 文本优化",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import timber.log.Timber
+import com.type4me.BuildConfig
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
@@ -28,7 +29,6 @@ class GitHubUpdateChecker {
     companion object {
         private const val TAG = "GitHubUpdate"
         private const val GITHUB_API_URL = "https://api.github.com/repos/91zgaoge/type4me-android/releases/latest"
-        private const val CURRENT_VERSION = "1.0.0"
     }
 
     /**
@@ -54,9 +54,10 @@ class GitHubUpdateChecker {
                 val release = gson.fromJson(body, GitHubRelease::class.java)
 
                 val latestVersion = release.tagName.removePrefix("v")
-                Timber.tag(TAG).d("Latest version: $latestVersion, Current: $CURRENT_VERSION")
+                val currentVersion = BuildConfig.VERSION_NAME
+                Timber.tag(TAG).d("Latest version: $latestVersion, Current: $currentVersion")
 
-                if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
+                if (isNewerVersion(latestVersion, currentVersion)) {
                     // 查找 APK 文件
                     val apkAsset = release.assets.find { it.name.endsWith(".apk") }
                         ?: return@withContext null

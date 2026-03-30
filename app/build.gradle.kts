@@ -14,8 +14,8 @@ android {
         applicationId = "com.type4me"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -44,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.5"
@@ -91,8 +92,8 @@ dependencies {
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
 
-    // SherpaOnnx - 本地 ASR (动态加载)
-    // implementation("com.github.k2-fsa:sherpa-onnx:v1.9.25")
+    // SherpaOnnx - 本地 ASR (需要手动下载 AAR 文件)
+    // implementation("com.github.k2-fsa:sherpa-onnx:v1.12.15")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
