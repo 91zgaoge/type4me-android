@@ -95,6 +95,9 @@ dependencies {
     // SherpaOnnx - 本地 ASR (需要手动下载 AAR 文件)
     // implementation("com.github.k2-fsa:sherpa-onnx:v1.12.15")
 
+    // Vosk - 离线语音识别
+    implementation("com.alphacephei:vosk-android:0.3.47")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.8")

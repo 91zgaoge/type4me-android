@@ -20,6 +20,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.type4me.core.data.local.SherpaOnnxEngine
+import com.type4me.core.data.local.VoskEngine
 import kotlinx.coroutines.*
 import timber.log.Timber
 
@@ -32,12 +33,14 @@ class Type4MeInputMethodService : InputMethodService() {
     // 引擎类型
     enum class ASREngine {
         GOOGLE_ONLINE,
-        SHERPA_ONNX_OFFLINE
+        SHERPA_ONNX_OFFLINE,
+        VOSK_OFFLINE
     }
 
-    private var currentEngine: ASREngine = ASREngine.GOOGLE_ONLINE
+    private var currentEngine: ASREngine = ASREngine.VOSK_OFFLINE
     private var speechRecognizer: SpeechRecognizer? = null
     private var sherpaEngine: SherpaOnnxEngine? = null
+    private var voskEngine: VoskEngine? = null
     private var isRecording = false
     private var statusTextView: TextView? = null
     private var micButton: Button? = null
@@ -89,48 +92,98 @@ class Type4MeInputMethodService : InputMethodService() {
 
         // 初始化离线引擎
         sherpaEngine = SherpaOnnxEngine(this)
+        voskEngine = VoskEngine(this)
         updateEngineStatusUI()
 
+        // Google 引擎在中国不可用，默认使用 Vosk
         initGoogleSpeechRecognizer()
     }
 
     private fun updateEngineStatusUI() {
+        val voskReady = voskEngine?.let { it.isModelReady() || it.getModelStatus().contains("就绪") } == true
         val sherpaReady = sherpaEngine?.isModelReady() == true
+
         val status = when {
-            sherpaReady -> "离线引擎就绪"
-            sherpaEngine != null -> "离线引擎需要下载模型"
-            else -> "仅在线引擎可用"
+            voskReady -> "Vosk离线引擎就绪"
+            sherpaReady -> "Sherpa离线引擎就绪"
+            else -> "离线引擎需要下载模型"
         }
 
-        engineSwitchButton?.text = if (currentEngine == ASREngine.GOOGLE_ONLINE) {
-            "切换离线引擎 (${status})"
-        } else {
-            "切换在线引擎 (${status})"
+        val currentName = when (currentEngine) {
+            ASREngine.GOOGLE_ONLINE -> "Google在线"
+            ASREngine.SHERPA_ONNX_OFFLINE -> "Sherpa离线"
+            ASREngine.VOSK_OFFLINE -> "Vosk离线"
         }
+
+        engineSwitchButton?.text = "$currentName ($status)"
     }
 
     private fun toggleEngine() {
-        if (currentEngine == ASREngine.GOOGLE_ONLINE) {
-            // 尝试切换到离线引擎
-            if (sherpaEngine?.isModelReady() == true) {
-                scope.launch {
-                    val initialized = sherpaEngine?.initialize() == true
-                    if (initialized) {
-                        currentEngine = ASREngine.SHERPA_ONNX_OFFLINE
-                        statusTextView?.text = "已切换到离线引擎"
-                    } else {
-                        statusTextView?.text = "离线引擎初始化失败"
-                    }
-                    updateEngineStatusUI()
+        when (currentEngine) {
+            ASREngine.GOOGLE_ONLINE -> {
+                // 切换到 Vosk（推荐）
+                if (voskEngine?.isModelReady() == true) {
+                    initVoskEngine()
+                } else {
+                    downloadVoskModel()
                 }
-            } else {
-                // 下载模型
-                downloadModel()
             }
-        } else {
-            currentEngine = ASREngine.GOOGLE_ONLINE
-            statusTextView?.text = "已切换到在线引擎"
+            ASREngine.VOSK_OFFLINE -> {
+                // 切换到 Sherpa
+                if (sherpaEngine?.isModelReady() == true) {
+                    initSherpaEngine()
+                } else {
+                    downloadModel()
+                }
+            }
+            ASREngine.SHERPA_ONNX_OFFLINE -> {
+                // 切换回 Google
+                currentEngine = ASREngine.GOOGLE_ONLINE
+                statusTextView?.text = "已切换到Google在线引擎（中国不可用）"
+                updateEngineStatusUI()
+            }
+        }
+    }
+
+    private fun initVoskEngine() {
+        scope.launch {
+            statusTextView?.text = "正在初始化 Vosk 引擎..."
+            val initialized = voskEngine?.initialize() == true
+            if (initialized) {
+                currentEngine = ASREngine.VOSK_OFFLINE
+                statusTextView?.text = "Vosk 引擎已就绪"
+            } else {
+                statusTextView?.text = "Vosk 初始化失败，请检查模型"
+            }
             updateEngineStatusUI()
+        }
+    }
+
+    private fun initSherpaEngine() {
+        scope.launch {
+            statusTextView?.text = "正在初始化 Sherpa 引擎..."
+            val initialized = sherpaEngine?.initialize() == true
+            if (initialized) {
+                currentEngine = ASREngine.SHERPA_ONNX_OFFLINE
+                statusTextView?.text = "Sherpa 引擎已就绪"
+            } else {
+                statusTextView?.text = "Sherpa 初始化失败"
+            }
+            updateEngineStatusUI()
+        }
+    }
+
+    private fun downloadVoskModel() {
+        statusTextView?.text = "请下载 Vosk 中文模型 (~40MB)"
+        // 打开浏览器下载模型
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse("https://alphacephei.com/vosk/models")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            statusTextView?.text = "请手动下载模型: alphacephei.com/vosk/models"
         }
     }
 
@@ -404,6 +457,7 @@ class Type4MeInputMethodService : InputMethodService() {
         when (currentEngine) {
             ASREngine.GOOGLE_ONLINE -> startGoogleRecording()
             ASREngine.SHERPA_ONNX_OFFLINE -> startSherpaRecording()
+            ASREngine.VOSK_OFFLINE -> startVoskRecording()
         }
     }
 
@@ -435,6 +489,62 @@ class Type4MeInputMethodService : InputMethodService() {
             currentEngine = ASREngine.SHERPA_ONNX_OFFLINE
             updateEngineStatusUI()
             startSherpaRecording()
+        }
+    }
+
+    private fun startVoskRecording() {
+        Timber.tag(TAG).d("Starting Vosk recording")
+
+        // 确保引擎已初始化
+        if (voskEngine?.let { it.isModelReady() || it.getModelStatus().contains("就绪") } != true) {
+            statusTextView?.text = "Vosk 模型未就绪，点击切换引擎下载"
+            return
+        }
+
+        scope.launch {
+            // 初始化引擎
+            val initialized = voskEngine?.initialize() == true
+            if (!initialized) {
+                statusTextView?.text = "Vosk 引擎初始化失败"
+                return@launch
+            }
+
+            // 收集部分识别结果
+            scope.launch {
+                voskEngine?.partialResult?.collect { text ->
+                    handler.post {
+                        if (text.isNotEmpty()) {
+                            editText?.setText(text)
+                            statusTextView?.text = "识别中: $text"
+                        }
+                    }
+                }
+            }
+
+            // 收集最终结果
+            scope.launch {
+                voskEngine?.recognitionResult?.collect { text ->
+                    handler.post {
+                        if (text.isNotEmpty()) {
+                            editText?.setText(text)
+                            statusTextView?.text = "✓ 识别成功，点击上屏"
+                        } else {
+                            statusTextView?.text = "未能识别，请重试"
+                        }
+                        isRecording = false
+                        micButton?.text = "🎤 点击说话"
+                    }
+                }
+            }
+
+            val started = voskEngine?.startRecording() == true
+            if (started) {
+                isRecording = true
+                micButton?.text = "⏹ 停止"
+                statusTextView?.text = "🎤 正在听...请说话 (Vosk离线)"
+            } else {
+                statusTextView?.text = "Vosk 引擎启动失败"
+            }
         }
     }
 
@@ -494,6 +604,9 @@ class Type4MeInputMethodService : InputMethodService() {
             ASREngine.SHERPA_ONNX_OFFLINE -> {
                 sherpaEngine?.stopRecording()
             }
+            ASREngine.VOSK_OFFLINE -> {
+                voskEngine?.stopRecording()
+            }
         }
 
         isRecording = false
@@ -505,6 +618,7 @@ class Type4MeInputMethodService : InputMethodService() {
         super.onDestroy()
         speechRecognizer?.destroy()
         sherpaEngine?.release()
+        voskEngine?.release()
         scope.cancel()
     }
 }
