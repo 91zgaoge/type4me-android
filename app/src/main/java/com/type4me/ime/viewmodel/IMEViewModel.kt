@@ -10,16 +10,15 @@ import com.type4me.core.domain.model.RecognitionResult
 import com.type4me.core.domain.repository.ASRRepository
 import com.type4me.core.domain.repository.LLMRepository
 import com.type4me.core.domain.repository.SettingsRepository
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedFactory
-import dagger.assisted.AssistedInject
+import com.type4me.ime.Type4MeInputMethodService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
-class IMEViewModel @AssistedInject constructor(
-    @Assisted private val service: com.type4me.ime.Type4MeInputMethodService,
+class IMEViewModel(
+    private val service: Type4MeInputMethodService,
     private val asrRepository: ASRRepository,
     private val llmRepository: LLMRepository,
     private val settingsRepository: SettingsRepository
@@ -56,6 +55,7 @@ class IMEViewModel @AssistedInject constructor(
                     }
                 }
             } catch (e: Exception) {
+                Timber.e(e, "Recording failed")
                 _state.value = State.Error(e.message ?: "识别失败")
             }
         }
@@ -92,16 +92,23 @@ class IMEViewModel @AssistedInject constructor(
         _currentText.value = ""
     }
 
-    @AssistedFactory
-    interface Factory {
-        fun create(service: com.type4me.ime.Type4MeInputMethodService): IMEViewModel
-    }
-}
+    class Factory(
+        private val service: Type4MeInputMethodService,
+        private val asrRepository: ASRRepository,
+        private val llmRepository: LLMRepository,
+        private val settingsRepository: SettingsRepository
+    ) {
+        fun create(): IMEViewModel {
+            return IMEViewModel(service, asrRepository, llmRepository, settingsRepository)
+        }
 
-@Suppress("UNCHECKED_CAST")
-fun IMEViewModel.Factory.asViewModelFactory(service: com.type4me.ime.Type4MeInputMethodService) =
-    object : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return create(service) as T
+        fun asViewModelFactory(): ViewModelProvider.Factory {
+            return object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    return create() as T
+                }
+            }
         }
     }
+}
