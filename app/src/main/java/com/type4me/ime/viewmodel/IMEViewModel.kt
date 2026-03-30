@@ -65,8 +65,8 @@ class IMEViewModel(
         asrRepository.stopRecognition()
     }
 
-    fun commitText(text: String) {
-        service.commitText(text)
+    fun commitText(text: String, commitCallback: (String) -> Unit) {
+        commitCallback(text)
         reset()
     }
 

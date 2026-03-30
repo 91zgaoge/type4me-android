@@ -2,133 +2,105 @@ package com.type4me.ime
 
 import android.inputmethodservice.InputMethodService
 import android.view.View
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
-import com.type4me.core.domain.repository.ASRRepository
-import com.type4me.core.domain.repository.LLMRepository
-import com.type4me.core.domain.repository.SettingsRepository
-import com.type4me.ime.ui.KeyboardScreen
-import com.type4me.ime.viewmodel.IMEViewModel
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
 import timber.log.Timber
 
-class Type4MeInputMethodService : InputMethodService(),
-    LifecycleOwner,
-    ViewModelStoreOwner,
-    SavedStateRegistryOwner {
+/**
+ * 简化的输入法服务 - 先确保基本功能正常
+ */
+class Type4MeInputMethodService : InputMethodService() {
 
-    @EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface ServiceEntryPoint {
-        fun asrRepository(): ASRRepository
-        fun llmRepository(): LLMRepository
-        fun settingsRepository(): SettingsRepository
+    companion object {
+        private const val TAG = "Type4MeIME"
     }
-
-    private lateinit var lifecycleRegistry: LifecycleRegistry
-    private val savedStateRegistryController = SavedStateRegistryController.create(this)
-    private val _viewModelStore = ViewModelStore()
-    private var composeView: ComposeView? = null
-
-    private lateinit var viewModel: IMEViewModel
 
     override fun onCreate() {
         super.onCreate()
-        Timber.d("Type4MeInputMethodService onCreate")
-        lifecycleRegistry = LifecycleRegistry(this)
-        savedStateRegistryController.performRestore(null)
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        Timber.tag(TAG).d("onCreate called")
     }
 
     override fun onCreateInputView(): View {
-        Timber.d("Type4MeInputMethodService onCreateInputView")
-        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        Timber.tag(TAG).d("onCreateInputView called")
 
-        return try {
-            val entryPoint = EntryPointAccessors.fromApplication(
-                applicationContext,
-                ServiceEntryPoint::class.java
+        // 创建最简单的 UI - 一个垂直布局，包含标题和按钮
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF333333.toInt())
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                400 // 固定高度 400px
             )
+            setPadding(20, 20, 20, 20)
+        }
 
-            val factory = IMEViewModel.Factory(
-                service = this,
-                asrRepository = entryPoint.asrRepository(),
-                llmRepository = entryPoint.llmRepository(),
-                settingsRepository = entryPoint.settingsRepository()
+        // 标题
+        val titleView = TextView(this).apply {
+            text = "Type4Me 语音输入"
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 18f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
+        }
+        layout.addView(titleView)
 
-            viewModel = ViewModelProvider(
-                this,
-                factory.asViewModelFactory()
-            )[IMEViewModel::class.java]
-
-            composeView = ComposeView(this).apply {
-                setContent {
-                    MaterialTheme {
-                        KeyboardScreen(viewModel = viewModel)
-                    }
-                }
+        // 录音按钮
+        val micButton = Button(this).apply {
+            text = "🎤 点击录音"
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = 20
             }
-
-            Timber.d("Type4MeInputMethodService view created successfully")
-            composeView!!
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to create input view")
-            // Return a simple error view as fallback
-            android.widget.TextView(this).apply {
-                text = "Type4Me 加载失败: ${e.message}"
-                setPadding(50, 50, 50, 50)
+            setOnClickListener {
+                Timber.tag(TAG).d("Mic button clicked")
+                currentInputConnection?.commitText("测试语音输入", 1)
             }
         }
+        layout.addView(micButton)
+
+        // 上屏按钮
+        val commitButton = Button(this).apply {
+            text = "上屏测试文字"
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = 10
+            }
+            setOnClickListener {
+                Timber.tag(TAG).d("Commit button clicked")
+                currentInputConnection?.commitText("Hello Type4Me!", 1)
+            }
+        }
+        layout.addView(commitButton)
+
+        Timber.tag(TAG).d("Input view created successfully")
+        return layout
+    }
+
+    override fun onStartInput(attribute: android.view.inputmethod.EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        Timber.tag(TAG).d("onStartInput called, restarting=$restarting")
     }
 
     override fun onWindowShown() {
         super.onWindowShown()
-        Timber.d("Type4MeInputMethodService onWindowShown")
-        lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        Timber.tag(TAG).d("onWindowShown called")
     }
 
     override fun onWindowHidden() {
         super.onWindowHidden()
-        Timber.d("Type4MeInputMethodService onWindowHidden")
-        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        Timber.tag(TAG).d("onWindowHidden called")
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Timber.d("Type4MeInputMethodService onDestroy")
-        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
-        composeView?.disposeComposition()
-        composeView = null
-        _viewModelStore.clear()
-    }
-
-    override val lifecycle: Lifecycle
-        get() = lifecycleRegistry
-
-    override val viewModelStore: ViewModelStore
-        get() = _viewModelStore
-
-    override val savedStateRegistry: SavedStateRegistry
-        get() = savedStateRegistryController.savedStateRegistry
-
-    fun commitText(text: String) {
-        currentInputConnection?.commitText(text, 1)
-    }
-
-    fun sendEnter() {
-        currentInputConnection?.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEND)
+        Timber.tag(TAG).d("onDestroy called")
     }
 }
