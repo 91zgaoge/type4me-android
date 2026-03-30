@@ -256,15 +256,35 @@ class SherpaOnnxEngine(private val context: Context) {
                 TOKENS_NAME to "$MODEL_URL_BASE/$MODEL_DIR/$TOKENS_NAME"
             )
 
+            var totalProgress = 0
+
             files.forEachIndexed { index, (filename, url) ->
                 val file = File(modelDir, filename)
                 if (file.exists() && file.length() > 0) {
                     Timber.tag(TAG).d("$filename already exists, skipping")
+                    totalProgress = ((index + 1) * 100) / files.size
+                    progressCallback(totalProgress)
                 } else {
                     Timber.tag(TAG).d("Downloading $filename from $url")
-                    downloadFile(url, file)
+                    progressCallback(totalProgress) // 开始下载当前文件
+
+                    try {
+                        downloadFileWithProgress(url, file) { fileProgress ->
+                            // 计算总体进度: 已完成文件 + 当前文件进度
+                            val fileWeight = 100 / files.size
+                            val currentFileContribution = (fileProgress * fileWeight) / 100
+                            val overallProgress = (index * 100 / files.size) + currentFileContribution
+                            progressCallback(overallProgress.coerceIn(0, 100))
+                        }
+                        totalProgress = ((index + 1) * 100) / files.size
+                        progressCallback(totalProgress)
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Failed to download $filename")
+                        // 删除可能不完整的文件
+                        file.delete()
+                        throw e
+                    }
                 }
-                progressCallback(((index + 1) * 100) / files.size)
             }
 
             true
@@ -274,11 +294,39 @@ class SherpaOnnxEngine(private val context: Context) {
         }
     }
 
-    private fun downloadFile(urlString: String, outputFile: File) {
+    private fun downloadFileWithProgress(
+        urlString: String,
+        outputFile: File,
+        onProgress: (Int) -> Unit
+    ) {
         val url = URL(urlString)
-        url.openStream().use { input ->
+        val connection = url.openConnection().apply {
+            connectTimeout = 30000 // 30秒连接超时
+            readTimeout = 60000    // 60秒读取超时
+        }
+
+        val contentLength = connection.contentLength
+
+        connection.getInputStream().use { input ->
             FileOutputStream(outputFile).use { output ->
-                input.copyTo(output)
+                val buffer = ByteArray(8192)
+                var totalRead = 0
+                var bytesRead: Int
+
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+
+                    if (contentLength > 0) {
+                        val progress = (totalRead * 100) / contentLength
+                        onProgress(progress)
+                    }
+                }
+
+                // 如果无法获取 content length，在完成后报告 100%
+                if (contentLength <= 0) {
+                    onProgress(100)
+                }
             }
         }
     }
