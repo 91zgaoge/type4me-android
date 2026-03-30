@@ -41,6 +41,9 @@ class VoskEngine(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
 
+    // Assets 模型管理器
+    private val assetsModelManager by lazy { AssetsModelManager(context) }
+
     private val bufferSize = AudioRecord.getMinBufferSize(
         SAMPLE_RATE,
         AudioFormat.CHANNEL_IN_MONO,
@@ -61,10 +64,26 @@ class VoskEngine(private val context: Context) {
     }
 
     /**
-     * 检查模型是否已下载
-     * 支持多种可能的目录结构
+     * 检查模型是否已就绪（外部存储或 assets）
      */
     fun isModelReady(): Boolean {
+        // 检查外部存储
+        if (isModelInExternalStorage()) {
+            return true
+        }
+
+        // 检查 assets 中是否有模型（需要解压）
+        if (assetsModelManager.hasModelInAssets()) {
+            return true
+        }
+
+        return false
+    }
+
+    /**
+     * 检查外部存储中是否有完整模型
+     */
+    fun isModelInExternalStorage(): Boolean {
         val basePath = File(getModelPath())
 
         // 情况1: 标准路径下直接有模型文件
@@ -72,7 +91,7 @@ class VoskEngine(private val context: Context) {
             return true
         }
 
-        // 情况2: 多嵌套了一层目录（vosk-model-small-cn-0.22/vosk-model-small-cn-0.22/）
+        // 情况2: 多嵌套了一层目录
         val nestedDir = File(basePath, MODEL_DIR)
         if (checkModelStructure(nestedDir)) {
             return true
@@ -89,7 +108,22 @@ class VoskEngine(private val context: Context) {
     }
 
     /**
+     * 检查是否需要从 assets 解压
+     */
+    fun needsExtraction(): Boolean {
+        return assetsModelManager.hasModelInAssets() && !isModelInExternalStorage()
+    }
+
+    /**
+     * 从 assets 解压模型
+     */
+    suspend fun extractModelFromAssets(progressCallback: (Int) -> Unit): Boolean {
+        return assetsModelManager.extractModel(progressCallback)
+    }
+
+    /**
      * 获取实际模型路径（处理嵌套目录情况）
+     * 优先使用已解压的外部存储路径
      */
     fun getActualModelPath(): String {
         val basePath = File(getModelPath())
@@ -112,7 +146,8 @@ class VoskEngine(private val context: Context) {
             }
         }
 
-        return basePath.absolutePath
+        // 默认返回 assets 管理器的路径（用于首次解压）
+        return assetsModelManager.getModelPath()
     }
 
     /**
@@ -137,8 +172,9 @@ class VoskEngine(private val context: Context) {
     fun getModelStatus(): String {
         return when {
             isInitialized -> "引擎已就绪"
-            isModelReady() -> "模型已就绪"
-            else -> "需要下载模型（约 40MB）"
+            isModelInExternalStorage() -> "模型已就绪"
+            assetsModelManager.hasModelInAssets() -> "首次使用需解压（约5秒）"
+            else -> "需要下载模型"
         }
     }
 

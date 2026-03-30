@@ -142,7 +142,8 @@ class Type4MeInputMethodService : InputMethodService() {
     }
 
     private fun updateComposeEngineStatus() {
-        val voskReady = voskEngine?.isModelReady() == true
+        val voskInStorage = voskEngine?.isModelInExternalStorage() == true
+        val voskNeedsExtraction = voskEngine?.needsExtraction() == true
         val sherpaReady = sherpaEngine?.isModelReady() == true
 
         // 调试信息
@@ -150,10 +151,12 @@ class Type4MeInputMethodService : InputMethodService() {
         val pathExists = modelPath?.exists() == true
         val isDir = modelPath?.isDirectory == true
 
-        Timber.tag(TAG).d("Model check: path=$modelPath, exists=$pathExists, isDir=$isDir, voskReady=$voskReady")
+        Timber.tag(TAG).d("Model check: path=$modelPath, exists=$pathExists, isDir=$isDir, " +
+            "voskInStorage=$voskInStorage, voskNeedsExtraction=$voskNeedsExtraction")
 
         composeEngineStatus = when {
-            voskReady -> "就绪"
+            voskInStorage -> "就绪"
+            voskNeedsExtraction -> "需解压"
             sherpaReady -> "就绪 (Sherpa)"
             pathExists -> "模型路径存在但结构不对"
             else -> "需下载"
@@ -183,8 +186,10 @@ class Type4MeInputMethodService : InputMethodService() {
     private fun toggleEngine() {
         when (currentEngine) {
             ASREngine.GOOGLE_ONLINE -> {
-                if (voskEngine?.isModelReady() == true) {
+                if (voskEngine?.isModelInExternalStorage() == true) {
                     initVoskEngine()
+                } else if (voskEngine?.needsExtraction() == true) {
+                    extractVoskModelFromAssets()
                 } else {
                     downloadVoskModel()
                 }
@@ -201,6 +206,31 @@ class Type4MeInputMethodService : InputMethodService() {
                 composeStatusText = "已切换到Google在线引擎（中国不可用）"
                 updateComposeEngineStatus()
             }
+        }
+    }
+
+    private fun extractVoskModelFromAssets() {
+        scope.launch {
+            composeStatusText = "正在解压模型，请稍候..."
+
+            val success = voskEngine?.extractModelFromAssets { progress ->
+                composeStatusText = "解压模型中... $progress%"
+            } == true
+
+            if (success) {
+                composeStatusText = "模型解压完成，正在初始化..."
+                val initialized = voskEngine?.initialize() == true
+                if (initialized) {
+                    currentEngine = ASREngine.VOSK_OFFLINE
+                    composeStatusText = "Vosk 引擎已就绪"
+                } else {
+                    composeStatusText = "Vosk 初始化失败"
+                }
+            } else {
+                composeStatusText = "模型解压失败，尝试下载..."
+                downloadVoskModel()
+            }
+            updateComposeEngineStatus()
         }
     }
 

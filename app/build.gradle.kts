@@ -53,6 +53,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // 模型文件不压缩，加快运行时访问速度
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
